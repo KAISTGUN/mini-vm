@@ -17,8 +17,9 @@
 // Size of the global function pointer table
 #define MVM_NUM_FUNS 256
 
-#define MVM_NUM_REGISTERS 16 // Default
+#define MVM_NUM_REGISTERS 256 // Default
 
+#define MAX_HEAP_SPACE 8192
 
 //---------------------------------------------------------
 // DATA STRUCTURES & TYPEDEFS:
@@ -30,14 +31,15 @@ typedef void (*FunPtr)(struct VMContext* ctx, const uint32_t);
 //CHANGE THE INTERNALS OF THIS FOR YOUR OWN VM!
 typedef struct Reg {
     uint32_t type;
-    uint32_t value;
+    uint32_t value;    
 } Reg;
-
+// Add pc value to track the instruction pointer.
 typedef struct VMContext {
     uint32_t numRegs;
     uint32_t numFuns;
     Reg* r;           // Ptr to register array.
     FunPtr* funtable; // Ptr to a funptr table.
+    uint32_t* pc;    
 } VMContext;
 
 
@@ -68,11 +70,14 @@ void dispatch(struct VMContext* ctx, const uint32_t instr);
 
 // Initializes a VMContext in-place.
 // initVMContext :: VMContext -> uint32_t -> uint32_t -> [Reg] -> [FunPtr] -> Effect()
+// Add pc value to track the instruction pointer.
 void initVMContext(struct VMContext* ctx,
                       const uint32_t numRegs,
                       const uint32_t numFuns,
-                                Reg* registers,
-                             FunPtr* funtable);
+                            Reg* registers,
+                            FunPtr* funtable,
+                            uint32_t* pc                          
+                             );
 
 // Reads an instruction, executes it, then steps to the next instruction.
 // stepVMContext :: VMContext -> uint32_t** -> Effect()
