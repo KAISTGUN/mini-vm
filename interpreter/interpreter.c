@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include "minivm.h"
 
-#define NUM_REGS   (256)
+#define NUM_REGS   (256)    
 #define NUM_FUNCS  (256)
 
 // Indicates HEAP Area, CODE area, CODESIZE
@@ -76,30 +76,28 @@ void ge (struct VMContext * ctx, const uint32_t instr){
 void eq(struct VMContext * ctx, const uint32_t instr){
     const uint32_t a = EXTRACT_B1(instr);
     const uint32_t b = EXTRACT_B2(instr);
-    const uint32_t c = EXTRACT_B3(instr);
+    const uint32_t c = EXTRACT_B3(instr);    
     ctx->r[a].value = ctx->r[b].value == ctx->r[c].value ? 1 : 0;
 }
 
 void ite(struct VMContext * ctx, const uint32_t instr){
-    const uint32_t a = EXTRACT_B1(instr);
+    const uint32_t 
+    a = EXTRACT_B1(instr);
     const uint8_t imm1 = EXTRACT_B2(instr);
     const uint8_t imm2 = EXTRACT_B3(instr);
-    ctx->pc = (&CODE);
-    ctx->pc = ctx->r[a].value > 0 ? ctx->pc + (imm1) : ctx->pc + (imm2);    
+    ctx->pc = ctx->r[a].value == 0 ? CODE+4*(imm1) : CODE+4*(imm2);  
 }
 void jump(struct VMContext * ctx, const uint32_t instr){
     // imm1 is a line to jump.
-    const uint32_t imm1 = EXTRACT_B1(instr);
-
+    const uint8_t imm1 = EXTRACT_B1(instr);
+    
     // imm1 must be in the CODE area. imm1 is unsigned variable, always larger than 0.    
     if (imm1 > (CODESIZE/4)){
         printf("\nInvalid jump to line %d",imm1);
         exit(1);
-    }
-    ctx->pc = (&CODE);
-    ctx->pc = ctx->pc + (imm1);
+    }    
+    ctx->pc = CODE+4*(imm1);    
 }
-
 
 void put(struct VMContext* ctx, const uint32_t instr) {
     uint32_t a = EXTRACT_B1(instr);        
@@ -133,8 +131,10 @@ void gcd(struct VMContext* ctx, const uint32_t instr) {
     unsigned int R2 = HEAP[(ctx->r[b].value)] - 48;
     unsigned int R3 = HEAP[(ctx->r[c].value)] - 48;
     unsigned int gcd = 1;
-    // If any of them is a zero value, do not compute gcd.
-    if( (R2 | R3) == 0){
+    
+    // If any of inputs is a zero value, do not compute gcd.
+    if( (R2 && R3) == 0)
+    {
         printf("Invalid value for gcd\n");
         exit(1);
     }
@@ -149,12 +149,30 @@ void gcd(struct VMContext* ctx, const uint32_t instr) {
     HEAP[(ctx->r[a].value)] = gcd + 48;
 }
 
+// je function is not much different from ite. but I can decide jump or not using je function.
+// if a register value is zero, jump to imm (address).
+void je(struct VMContext * ctx, const uint32_t instr){
+    const uint32_t a = EXTRACT_B1(instr);
+    const uint8_t imm1 = EXTRACT_B2(instr);    
+
+// imm1 must be in the CODE area. imm1 is unsigned variable, always larger than 0.    
+    if (imm1 > (CODESIZE/4)){
+        printf("\nInvalid jump to line %d",imm1);
+        exit(1);
+    }
+
+     if(ctx->r[a].value == 0){
+       ctx->pc = CODE+4*(imm1-1);
+    }
+     
+}
 
 void usageExit() {
     // TODO: show usage
     printf("Usage : ./interpreter FILE\n");
     exit(1);
 }
+
 void initFuncs(FunPtr *f, uint32_t cnt) {
     uint32_t i;
     for (i = 0; i < cnt; i++) {
@@ -177,6 +195,7 @@ void initFuncs(FunPtr *f, uint32_t cnt) {
     f[0xc0] = put;
     f[0xd0] = get;
     f[0xe0] = gcd;
+    f[0xf0] = je;
 }
 void initRegs(Reg *r, uint32_t cnt)
 {
@@ -214,11 +233,12 @@ int main(int argc, char** argv) {
         perror("fopen");
         return 1;
     }    
-    
-    // Initialize VM context.    
-    CODESIZE = fread((void *)&CODE, 1, 2048, bytecode);     
 
-    
+
+
+    // Initialize VM context.    
+    CODESIZE = fread((void *)&CODE, 1, 2048, bytecode);       
+
 
     pc = (uint32_t*) &CODE;
 
