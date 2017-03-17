@@ -17,7 +17,7 @@ let usage () =
   print_endline "Usage : ocaml str.cma compiler.ml <asm file> <output file>"
 
 let error line msg =
-  Printf.printf "[Errror] Line %d : %s\n    %s\n" line.num msg line.content;
+  Printf.printf "[Error] Line %d : %s\n    %s\n" line.num msg line.content;
   exit 1
 
 let opcode_to_int = function
@@ -35,6 +35,7 @@ let opcode_to_int = function
   | "jump" -> 0xb0
   | "puts" -> 0xc0
   | "gets" -> 0xd0
+  | "gcd" -> 0xe0 (*Add gcd opcode to handle manual function*)
   | opcode -> failwith ("[Unreachable] type_check() should have handled this")
 
 type oprnd_typ = Reg | Imm
@@ -54,6 +55,7 @@ let get_operand_type line = function
   | "jump" -> [Imm]
   | "puts" -> [Reg]
   | "gets" -> [Reg]
+  | "gcd" -> [Reg; Reg; Reg] (*Add gcd opcode to handle manual function*)
   | opcode -> error line ("Invalid opcode: " ^ opcode)
 
 let out_opcode oc opcode =

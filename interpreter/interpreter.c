@@ -9,14 +9,16 @@
 #define NUM_REGS   (256)
 #define NUM_FUNCS  (256)
 
-char HEAP[MAX_HEAP_SPACE];
-char CODE[2048];
+// Indicates HEAP Area, CODE area, CODESIZE
+char HEAP[MAX_HEAP_SPACE] = {0,}; 
+char CODE[2049];
+unsigned int CODESIZE = 0;
 
 // Global variable that indicates if the process is running.
 static bool is_running = true;
 
 
-void halt(void){
+void halt(void){    
     is_running = false;
 }
 
@@ -29,10 +31,8 @@ void load(struct VMContext * ctx, const uint32_t instr){
 void store(struct VMContext * ctx, const uint32_t instr){
     const uint8_t a = EXTRACT_B1(instr);
     const uint8_t b = EXTRACT_B2(instr);
-    HEAP[ctx->r[a].value] = ctx ->r[b].value;
-    
+    HEAP[ctx->r[a].value] = ctx ->r[b].value;    
 }
-
 void move(struct VMContext * ctx, const uint32_t instr){
     const uint32_t a = EXTRACT_B1(instr);
     const uint32_t b = EXTRACT_B2(instr);
@@ -87,46 +87,67 @@ void ite(struct VMContext * ctx, const uint32_t instr){
     ctx->pc = (&CODE);
     ctx->pc = ctx->r[a].value > 0 ? ctx->pc + (imm1) : ctx->pc + (imm2);    
 }
+void jump(struct VMContext * ctx, const uint32_t instr){
+    // imm1 is a line to jump.
+    const uint32_t imm1 = EXTRACT_B1(instr);
 
-void jump(struct VMContext * ctx, const uint8_t instr){
-    // imm1 is an offset of the base address to jump.
-    const uint8_t imm1 = EXTRACT_B1(instr);
+    // imm1 must be in the CODE area. imm1 is unsigned variable, always larger than 0.    
+    if (imm1 > (CODESIZE/4)){
+        printf("\nInvalid jump to line %d",imm1);
+        exit(1);
+    }
     ctx->pc = (&CODE);
-    ctx->pc = ctx->pc + (imm1);    
+    ctx->pc = ctx->pc + (imm1);
 }
 
 
 void put(struct VMContext* ctx, const uint32_t instr) {
-
     uint32_t a = EXTRACT_B1(instr);        
     uint32_t i = 0;
     char character;
       // Iterate until meets a NULL character.
-
     do{
-
         character = HEAP[ (ctx->r[a].value) + i ];
         putchar(character);
         i++;
-
     }while( character != 0X00);
-      
-
 }
-
- 
-
 void get(struct VMContext* ctx, const uint32_t instr) {
     uint32_t a = EXTRACT_B1(instr);            
     uint32_t i = 0; 
     char inputchar;
-
-    while (  (inputchar=fgetc(stdin)) != 0x0A) {        
+    while ((inputchar=fgetc(stdin)) != 0x0A){    
         HEAP[ (ctx->r[a].value) + i ] = inputchar;
         i++;             
     }
 }
 
+
+// Add a manual opcode. It works as a function.
+// "gcd" opcode computes a gcd value of memory values located at R2 and R3 each.
+// a gcd value will be stored in the memory value located at R1.
+void gcd(struct VMContext* ctx, const uint32_t instr) {
+    const uint32_t a = EXTRACT_B1(instr);                
+    const uint32_t b = EXTRACT_B2(instr);
+    const uint32_t c = EXTRACT_B3(instr);          
+    unsigned int R2 = HEAP[(ctx->r[b].value)] - 48;
+    unsigned int R3 = HEAP[(ctx->r[c].value)] - 48;
+    unsigned int gcd = 1;
+    // If any of them is a zero value, do not compute gcd.
+    if( (R2 | R3) == 0){
+        printf("Invalid value for gcd\n");
+        exit(1);
+    }
+
+    //Compute GCD
+    for(unsigned int i=2; (i <= R2 ) && (i<= R3) ; i++)
+    {        
+        if(R2%i==0 && R3%i==0)
+            gcd = i;
+    }      
+    // Store a gcd value to the memory in the R1.
+    HEAP[(ctx->r[a].value)] = gcd + 48;
+}
 
 
 void usageExit() {
@@ -134,16 +155,11 @@ void usageExit() {
     printf("Usage : ./interpreter FILE\n");
     exit(1);
 }
-
-
-
-
 void initFuncs(FunPtr *f, uint32_t cnt) {
     uint32_t i;
     for (i = 0; i < cnt; i++) {
         f[i] = NULL;
     }
-
     // TODO: initialize function pointers
     f[0x00] = halt;
     f[0x10] = load;
@@ -157,13 +173,11 @@ void initFuncs(FunPtr *f, uint32_t cnt) {
     f[0x90] = eq;
     f[0xa0] = ite;
     f[0xb0] = jump;
-
     // puts and gets functions are already in the C library,so I changed the name of functions below.
     f[0xc0] = put;
     f[0xd0] = get;
-
+    f[0xe0] = gcd;
 }
-
 void initRegs(Reg *r, uint32_t cnt)
 {
     uint32_t i;
@@ -182,9 +196,7 @@ int main(int argc, char** argv) {
     Reg r[NUM_REGS];    
     FunPtr f[NUM_FUNCS];
     FILE* bytecode;    
-    uint32_t* pc;    
-    
-
+    uint32_t* pc;
 
     // There should be at least one argument.
     if (argc < 2) usageExit();
@@ -203,17 +215,19 @@ int main(int argc, char** argv) {
         return 1;
     }    
     
-    // Initialize VM context.
-    fread((void *)&CODE, 1, 1024, bytecode);   
+    // Initialize VM context.    
+    CODESIZE = fread((void *)&CODE, 1, 2048, bytecode);     
+
+    
+
     pc = (uint32_t*) &CODE;
 
     // Add pc value to track the instruction pointer.
-    initVMContext(&vm, NUM_REGS, NUM_FUNCS, r, f,pc);   
+    initVMContext(&vm, NUM_REGS, NUM_FUNCS, r, f, pc);   
 
 
-    while (is_running) {    
-        // TODO: Read 4-byte bytecode, and set the pc accordingly                
-        stepVMContext(&vm, &vm.pc);       
+    while (is_running) {            
+        stepVMContext(&vm, &vm.pc);               
     }
 
     fclose(bytecode);
